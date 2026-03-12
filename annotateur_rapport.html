@@ -766,7 +766,7 @@ function exportJSON() {
 
   for (const ph of placeholders) {
     const m = mappings[ph.name];
-    output.placeholders[`{${ph.name}}`] = m
+    output.placeholders[ph.name] = m
       ? { ...m, _mapped: true }
       : { _mapped: false, _note: "Non mappé" };
   }
@@ -808,7 +808,7 @@ function doImport() {
   if (data.placeholders) {
     mappings = {};
     for (const [key, val] of Object.entries(data.placeholders)) {
-      const name = key.replace(/^\{|\}$/g, '');
+      const name = key;
       if (val._mapped) mappings[name] = val;
     }
   }
