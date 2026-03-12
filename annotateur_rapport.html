@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Annotateur de Rapport</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #1a1a2e;
+    --paper: #faf8f4;
+    --ruled: #e8e4dc;
+    --accent: #c0392b;
+    --accent-light: #fdf0ef;
+    --annotated: #1a6b3a;
+    --annotated-light: #edf7f1;
+    --tag-bg: #fff3cd;
+    --tag-border: #e6a817;
+    --tag-text: #7a4800;
+    --panel: #ffffff;
+    --shadow: 0 4px 24px rgba(0,0,0,0.10);
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    background: #e8e3da;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--ink);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--ink);
+    color: #f0ece4;
+    padding: 0 28px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+    border-bottom: 3px solid var(--accent);
+  }
+  header h1 { font-family: 'Lora', serif; font-size: 17px; font-weight: 600; letter-spacing: 0.01em; }
+  header .sub { font-size: 12px; color: #9a9080; margin-left: 4px; }
+  header .actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .btn {
+    padding: 6px 16px; border-radius: 6px; border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn-outline { background: transparent; border: 1px solid #4a4060; color: #c8c0b8; }
+  .btn-outline:hover { border-color: #8a7870; color: #f0ece4; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #a93226; }
+  .btn-success { background: #1a6b3a; color: white; }
+  .btn-success:hover { background: #145530; }
+
+  /* ── Layout ── */
+  .workspace {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    overflow: hidden;
+  }
+
+  /* ── Document area ── */
+  .doc-area {
+    background: #d8d3ca;
+    overflow-y: auto;
+    padding: 32px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+
+  /* Paste zone */
+  .paste-zone {
+    background: var(--paper);
+    border: 2px dashed var(--ruled);
+    border-radius: 12px;
+    padding: 60px 40px;
+    text-align: center;
+    width: 100%;
+    max-width: 720px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .paste-zone:hover { border-color: var(--accent); }
+  .paste-zone .icon { font-size: 40px; margin-bottom: 16px; }
+  .paste-zone h2 { font-family: 'Lora', serif; font-size: 20px; margin-bottom: 8px; color: var(--ink); }
+  .paste-zone p { font-size: 13px; color: #7a7060; line-height: 1.6; }
+  .paste-zone textarea {
+    width: 100%; min-height: 160px; margin-top: 20px;
+    border: 1px solid var(--ruled); border-radius: 8px;
+    padding: 12px; font-family: 'DM Sans', sans-serif; font-size: 14px;
+    resize: vertical; background: white; color: var(--ink);
+  }
+  .paste-zone textarea:focus { outline: 2px solid var(--accent); }
+
+  /* Document page */
+  .doc-page {
+    background: var(--paper);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06);
+    padding: 52px 64px;
+    width: 100%;
+    max-width: 720px;
+    font-family: 'Lora', serif;
+    font-size: 15px;
+    line-height: 1.9;
+    color: #2a2030;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Placeholder chips in text */
+  .ph-chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1.5px solid;
+    transition: all 0.15s;
+    vertical-align: baseline;
+    line-height: 1.6;
+    position: relative;
+    top: -1px;
+  }
+  .ph-chip.unmapped {
+    background: var(--tag-bg);
+    border-color: var(--tag-border);
+    color: var(--tag-text);
+  }
+  .ph-chip.unmapped:hover { background: #ffe9a0; border-color: #c8900a; }
+  .ph-chip.mapped {
+    background: var(--annotated-light);
+    border-color: #4caf7d;
+    color: var(--annotated);
+  }
+  .ph-chip.mapped:hover { background: #d4f0e0; }
+  .ph-chip.active {
+    box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.3);
+    border-color: var(--accent) !important;
+  }
+
+  /* ── Side panel ── */
+  .side-panel {
+    background: var(--panel);
+    border-left: 1px solid var(--ruled);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--ruled);
+    flex-shrink: 0;
+  }
+  .panel-header h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #9a8878; margin-bottom: 2px; }
+
+  .placeholder-label {
+    font-family: var(--mono); font-size: 15px; font-weight: 600;
+    color: var(--accent); word-break: break-all;
+  }
+
+  .context-snippet {
+    background: #f5f2ec;
+    border-left: 3px solid var(--tag-border);
+    padding: 8px 12px;
+    font-family: 'Lora', serif;
+    font-size: 13px;
+    color: #5a5048;
+    line-height: 1.6;
+    border-radius: 0 6px 6px 0;
+    margin-top: 10px;
+    font-style: italic;
+  }
+  .context-snippet strong { font-style: normal; background: var(--tag-bg); padding: 0 3px; border-radius: 3px; color: var(--tag-text); }
+
+  .panel-form { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #8a7870; }
+  .field input, .field select, .field textarea {
+    border: 1.5px solid #e0dbd4; border-radius: 7px;
+    padding: 8px 10px; font-family: 'DM Sans', sans-serif; font-size: 13px;
+    color: var(--ink); background: #fdfcfa; transition: border-color 0.15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .field textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
+
+  .type-selector { display: flex; gap: 6px; }
+  .type-btn {
+    flex: 1; padding: 8px 4px; border-radius: 7px; border: 1.5px solid #e0dbd4;
+    background: #fdfcfa; cursor: pointer; font-size: 11px; font-weight: 600;
+    color: #7a6858; text-align: center; transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+  }
+  .type-btn:hover { border-color: #b0a898; }
+  .type-btn.active-cell { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+  .type-btn.active-formula { background: #f5f3ff; border-color: #8b5cf6; color: #6d28d9; }
+
+  .formula-help {
+    font-size: 11px; color: #8a7870; background: #f5f2ec;
+    border-radius: 6px; padding: 8px 10px; line-height: 1.6;
+  }
+  .formula-help code { font-family: var(--mono); background: #e8e4dc; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
+  /* ── Fallback block ── */
+  .fallback-block {
+    border: 1.5px dashed #e0dbd4; border-radius: 9px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+    background: #fdfaf6; transition: border-color 0.2s;
+  }
+  .fallback-block.active-fallback { border-color: #f59e0b; background: #fffbf0; }
+  .fallback-toggle {
+    display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  }
+  .fallback-toggle input[type=checkbox] { width: 15px; height: 15px; accent-color: #f59e0b; cursor: pointer; }
+  .fallback-toggle span { font-size: 12px; font-weight: 600; color: #7a6858; }
+  .fallback-badge {
+    margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    background: #fef3c7; border: 1px solid #f59e0b; color: #92400e;
+    border-radius: 4px; padding: 1px 6px;
+  }
+  .fallback-fields { display: flex; flex-direction: column; gap: 8px; }
+  .fallback-arrow {
+    display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9a8878;
+    padding: 2px 0;
+  }
+  .fallback-arrow::before { content: ""; display: block; width: 2px; height: 18px; background: #e0dbd4; border-radius: 2px; margin-left: 6px; }
+  .fallback-arrow span { font-style: italic; }
+
+  .panel-actions { padding: 14px 20px; border-top: 1px solid var(--ruled); display: flex; gap: 8px; flex-shrink: 0; }
+  .panel-actions .btn { flex: 1; padding: 9px; font-size: 13px; text-align: center; }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; color: #b0a898; padding: 20px; text-align: center;
+  }
+  .empty-state .icon { font-size: 36px; }
+  .empty-state p { font-size: 13px; line-height: 1.6; }
+
+  /* Progress bar */
+  .progress-bar-wrap { padding: 10px 20px 0; flex-shrink: 0; }
+  .progress-label { font-size: 11px; color: #8a7870; margin-bottom: 5px; display: flex; justify-content: space-between; }
+  .progress-track { background: #f0ece4; border-radius: 99px; height: 5px; }
+  .progress-fill { background: var(--annotated); border-radius: 99px; height: 5px; transition: width 0.4s ease; }
+
+  /* List view */
+  .ph-list { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .ph-list-item {
+    border: 1.5px solid #e8e4dc; border-radius: 8px; padding: 10px 12px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .ph-list-item:hover { border-color: #c0a898; background: #fdfbf8; }
+  .ph-list-item.mapped { border-color: #86efac; background: var(--annotated-light); }
+  .ph-list-item.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(192,57,43,0.15); }
+  .ph-list-item .ph-name { font-family: var(--mono); font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+  .ph-list-item .ph-name.unmapped-name { color: var(--tag-text); }
+  .ph-list-item .ph-name.mapped-name { color: var(--annotated); }
+  .ph-list-item .ph-summary { font-size: 11px; color: #8a7870; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: #1a1a2e; color: #f0ece4; padding: 10px 20px; border-radius: 8px;
+    font-size: 13px; font-weight: 500; transition: transform 0.3s ease; z-index: 9999;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Tab strip */
+  .tab-strip { display: flex; border-bottom: 1px solid var(--ruled); flex-shrink: 0; }
+  .tab { flex: 1; padding: 10px; text-align: center; font-size: 12px; font-weight: 600;
+    color: #9a8878; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--paper); border-radius: 12px; padding: 28px 32px;
+    width: 90%; max-width: 500px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal h3 { font-family: 'Lora', serif; font-size: 18px; margin-bottom: 8px; }
+  .modal p { font-size: 13px; color: #7a6858; margin-bottom: 20px; line-height: 1.6; }
+  .modal textarea {
+    width: 100%; min-height: 200px; border: 1.5px solid var(--ruled); border-radius: 8px;
+    padding: 12px; font-family: 'DM Sans', sans-serif; font-size: 14px; resize: vertical;
+    background: white; color: var(--ink);
+  }
+  .modal textarea:focus { outline: 2px solid var(--accent); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📄 Annotateur de Rapport</h1>
+  <span class="sub">— mapping placeholders → Excel</span>
+  <div class="actions">
+    <button class="btn btn-outline" onclick="loadDemo()">Exemple</button>
+    <button class="btn btn-outline" onclick="openPasteModal()">↺ Changer le texte</button>
+    <button class="btn btn-outline" onclick="importJSON()">Importer JSON</button>
+    <button class="btn btn-success" onclick="exportJSON()">⬇ Exporter JSON</button>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <!-- Left: document -->
+  <div class="doc-area" id="docArea">
+    <div class="paste-zone" id="pasteZone">
+      <div class="icon">📋</div>
+      <h2>Collez votre texte de rapport</h2>
+      <p>Copiez le texte de votre rapport Word avec les <code>{{placeholders}}</code><br>Ils seront détectés automatiquement et cliquables.</p>
+      <textarea id="pasteInput" placeholder="Le chiffre d'affaires total s'élève à {{CA_TOTAL}} euros, soit une progression de {{VARIATION_CA}}% par rapport à l'exercice précédent. L'effectif global est de {{EFFECTIF_TOTAL}} personnes..."></textarea>
+      <br><br>
+      <button class="btn btn-primary" onclick="loadText()">Charger le texte →</button>
+    </div>
+  </div>
+
+  <!-- Right: panel -->
+  <div class="side-panel" id="sidePanel">
+    <div class="empty-state" id="emptyState">
+      <div class="icon">←</div>
+      <p>Chargez un texte puis<br>cliquez sur un <span style="font-family:monospace;background:#fff3cd;padding:2px 6px;border-radius:4px;font-size:12px;color:#7a4800">{{placeholder}}</span><br>pour le mapper</p>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Paste modal -->
+<div class="modal-overlay" id="pasteModal">
+  <div class="modal">
+    <h3>Changer le texte</h3>
+    <p>Collez votre nouveau texte de rapport. Les annotations existantes compatibles seront conservées.</p>
+    <textarea id="modalTextarea" placeholder="Votre texte avec {{placeholders}}..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closePasteModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="loadTextFromModal()">Charger →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import modal -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <h3>Importer un mapping JSON</h3>
+    <p>Collez le contenu de votre fichier <code>mapping.json</code> pour recharger vos annotations.</p>
+    <textarea id="importTextarea" placeholder='{"placeholders": {...}}'></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="document.getElementById('importModal').classList.remove('open')">Annuler</button>
+      <button class="btn btn-primary" onclick="doImport()">Importer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+let reportText = "";
+let placeholders = [];   // [{id, name, occurrences:[{start,end}]}]
+let mappings = {};       // { placeholderName: { type, source, sheet, cell, formula, label, description } }
+let activePh = null;     // currently selected placeholder name
+let activeTab = "form";  // "form" | "list"
+
+const PLACEHOLDER_RE = /\{\{([A-Z0-9_]+)\}\}/g;
+
+// ── Load text ──────────────────────────────────────────────────────────
+function loadText() {
+  const txt = document.getElementById('pasteInput').value.trim();
+  if (!txt) { showToast("⚠ Collez un texte d'abord"); return; }
+  processText(txt);
+}
+function loadTextFromModal() {
+  const txt = document.getElementById('modalTextarea').value.trim();
+  if (!txt) return;
+  closePasteModal();
+  processText(txt);
+}
+function processText(txt) {
+  reportText = txt;
+  // extract unique placeholders
+  const found = new Map();
+  let m;
+  while ((m = PLACEHOLDER_RE.exec(txt)) !== null) {
+    const name = m[1];
+    if (!found.has(name)) found.set(name, []);
+    found.get(name).push({ start: m.index, end: m.index + m[0].length });
+  }
+  PLACEHOLDER_RE.lastIndex = 0;
+
+  placeholders = Array.from(found.entries()).map(([name, occ]) => ({ name, occurrences: occ }));
+
+  if (placeholders.length === 0) {
+    showToast("⚠ Aucun {{PLACEHOLDER}} trouvé dans le texte");
+    return;
+  }
+
+  // clear active
+  activePh = null;
+  renderDocument();
+  renderPanel();
+  showToast(`✓ ${placeholders.length} placeholder(s) détecté(s)`);
+}
+
+// ── Render document ────────────────────────────────────────────────────
+function renderDocument() {
+  const area = document.getElementById('docArea');
+
+  let html = escapeHtml(reportText);
+
+  // Replace placeholders with chips — process from end to start to preserve indices
+  // We work on the original text char positions but in the escaped string things shift,
+  // so we replace using regex on the escaped string instead.
+  html = html.replace(/\{\{([A-Z0-9_]+)\}\}/g, (match, name) => {
+    const isMapped = !!mappings[name];
+    const isActive = name === activePh;
+    const classes = ['ph-chip', isMapped ? 'mapped' : 'unmapped', isActive ? 'active' : ''].filter(Boolean).join(' ');
+    return `<span class="${classes}" onclick="selectPh('${name}')" title="${isMapped ? '✓ Mappé' : 'Cliquez pour mapper'}">${escapeHtml('{{' + name + '}}')}</span>`;
+  });
+
+  area.innerHTML = `<div class="doc-page">${html}</div>`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Select placeholder ─────────────────────────────────────────────────
+function selectPh(name) {
+  activePh = name;
+  renderDocument();
+  renderPanel();
+}
+
+// ── Render panel ───────────────────────────────────────────────────────
+function renderPanel() {
+  const panel = document.getElementById('sidePanel');
+
+  if (placeholders.length === 0) {
+    panel.innerHTML = `<div class="empty-state" id="emptyState">
+      <div class="icon">←</div>
+      <p>Chargez un texte puis<br>cliquez sur un placeholder</p>
+    </div>`;
+    return;
+  }
+
+  const mapped = placeholders.filter(p => mappings[p.name]).length;
+  const total = placeholders.length;
+  const pct = total ? Math.round(mapped / total * 100) : 0;
+
+  // context snippet for active ph
+  let contextHtml = '';
+  if (activePh) {
+    const ph = placeholders.find(p => p.name === activePh);
+    const occ = ph?.occurrences[0];
+    if (occ) {
+      const RADIUS = 60;
+      const start = Math.max(0, occ.start - RADIUS);
+      const end = Math.min(reportText.length, occ.end + RADIUS);
+      let snippet = reportText.slice(start, end);
+      if (start > 0) snippet = '…' + snippet;
+      if (end < reportText.length) snippet = snippet + '…';
+      const escaped = escapeHtml(snippet).replace(
+        escapeHtml('{{' + activePh + '}}'),
+        `<strong>{{${activePh}}}</strong>`
+      );
+      contextHtml = `<div class="context-snippet">${escaped}</div>`;
+    }
+  }
+
+  const mapping = activePh ? (mappings[activePh] || {}) : {};
+  const type = mapping.type || 'cell';
+
+  panel.innerHTML = `
+    <div class="panel-header">
+      <h2>Placeholder sélectionné</h2>
+      ${activePh
+        ? `<div class="placeholder-label">{{${activePh}}}</div>${contextHtml}`
+        : `<div style="font-size:13px;color:#9a8878;margin-top:4px">Cliquez un placeholder dans le texte</div>`
+      }
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-label"><span>Progression</span><span>${mapped}/${total} mappés</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>
+
+    <div class="tab-strip">
+      <div class="tab ${activeTab==='form'?'active':''}" onclick="switchTab('form')">✏ Annotation</div>
+      <div class="tab ${activeTab==='list'?'active':''}" onclick="switchTab('list')">☰ Liste (${total})</div>
+    </div>
+
+    ${activeTab === 'form' ? renderForm(mapping, type) : renderList()}
+  `;
+}
+
+function renderForm(mapping, type) {
+  if (!activePh) {
+    return `<div class="empty-state"><div class="icon">↑</div><p>Sélectionnez un placeholder dans le texte ou la liste</p></div>`;
+  }
+  const hasFallback = !!mapping.fallback;
+  return `
+    <div class="panel-form" id="panelForm">
+      <div class="field">
+        <label>Libellé métier</label>
+        <input id="f_label" value="${escAttr(mapping.label||'')}" placeholder="ex: Chiffre d'affaires total">
+      </div>
+
+      <div class="field">
+        <label>Type de source</label>
+        <div class="type-selector">
+          <button class="type-btn ${type==='cell'?'active-cell':''}" onclick="setType('cell')">⬡ Cellule<br>directe</button>
+          <button class="type-btn ${type==='formula'?'active-formula':''}" onclick="setType('formula')">∑ Formule<br>calculée</button>
+        </div>
+      </div>
+
+      ${type === 'cell' ? `
+        <div class="field">
+          <label>Fichier Excel — source primaire</label>
+          <input id="f_source" value="${escAttr(mapping.source||'')}" placeholder="ex: Budget_2024.xlsx">
+        </div>
+        <div class="field">
+          <label>Feuille (onglet)</label>
+          <input id="f_sheet" value="${escAttr(mapping.sheet||'')}" placeholder="ex: Résumé">
+        </div>
+        <div class="field">
+          <label>Cellule principale</label>
+          <input id="f_cell" value="${escAttr(mapping.cell||'')}" placeholder="ex: B14" style="font-family:var(--mono);font-size:14px;color:#c0392b">
+        </div>
+
+        <!-- Fallback block -->
+        <div class="fallback-block ${hasFallback ? 'active-fallback' : ''}" id="fallbackBlock">
+          <label class="fallback-toggle" onclick="toggleFallback()">
+            <input type="checkbox" id="f_fallback_enabled" ${hasFallback ? 'checked' : ''} onclick="event.stopPropagation();toggleFallback()">
+            <span>Cellule de repli si valeur vide (NA)</span>
+            <span class="fallback-badge">FALLBACK</span>
+          </label>
+          ${hasFallback ? `
+          <div class="fallback-fields" id="fallbackFields">
+            <div class="fallback-arrow"><span>si cellule principale = vide, lire :</span></div>
+            <div class="field">
+              <label>Fichier Excel — repli</label>
+              <input id="f_fb_source" value="${escAttr(mapping.fallback?.source||mapping.source||'')}" placeholder="ex: Budget_2024.xlsx">
+            </div>
+            <div class="field">
+              <label>Feuille — repli</label>
+              <input id="f_fb_sheet" value="${escAttr(mapping.fallback?.sheet||mapping.sheet||'')}" placeholder="ex: Résumé">
+            </div>
+            <div class="field">
+              <label>Cellule de repli</label>
+              <input id="f_fb_cell" value="${escAttr(mapping.fallback?.cell||'')}" placeholder="ex: C14" style="font-family:var(--mono);font-size:14px;color:#f59e0b">
+            </div>
+          </div>` : `<div id="fallbackFields" style="display:none"></div>`}
+        </div>
+      ` : `
+        <div class="field">
+          <label>Formule</label>
+          <textarea id="f_formula" placeholder="ex: (Budget_2024.xlsx|Résumé|B2 - Budget_2024.xlsx|Charges|C10) / Budget_2024.xlsx|Résumé|B2 * 100">${escAttr(mapping.formula||'')}</textarea>
+          <div class="formula-help">
+            Syntaxe : <code>fichier|feuille|cellule</code><br>
+            ex: <code>Ventes.xlsx|Résumé|B2</code> pour une cellule,<br>
+            utilisez <code>+ - * / ( )</code> pour les calculs.
+          </div>
+        </div>
+      `}
+
+      <div class="field">
+        <label>Format d'affichage</label>
+        <select id="f_format">
+          <option value="number" ${mapping.format==='number'?'selected':''}>Nombre</option>
+          <option value="currency" ${mapping.format==='currency'?'selected':''}>Monétaire (€)</option>
+          <option value="percent" ${mapping.format==='percent'?'selected':''}>Pourcentage (%)</option>
+          <option value="integer" ${mapping.format==='integer'?'selected':''}>Entier</option>
+          <option value="text" ${mapping.format==='text'?'selected':''}>Texte</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Note / commentaire</label>
+        <textarea id="f_description" placeholder="Explication pour l'auditeur...">${escAttr(mapping.description||'')}</textarea>
+      </div>
+    </div>
+
+    <div class="panel-actions">
+      <button class="btn btn-outline" onclick="clearMapping()" style="flex:0;padding:9px 14px" title="Effacer ce mapping">✕</button>
+      <button class="btn btn-primary" onclick="saveMapping()">Enregistrer</button>
+    </div>
+  `;
+}
+
+function toggleFallback() {
+  const cb = document.getElementById('f_fallback_enabled');
+  const block = document.getElementById('fallbackBlock');
+  const fields = document.getElementById('fallbackFields');
+  if (!cb || !fields) return;
+  const enabled = cb.checked;
+  block.classList.toggle('active-fallback', enabled);
+  if (enabled) {
+    const src = document.getElementById('f_source')?.value || '';
+    const sht = document.getElementById('f_sheet')?.value || '';
+    fields.style.display = 'flex';
+    fields.style.flexDirection = 'column';
+    fields.style.gap = '8px';
+    fields.innerHTML = `
+      <div class="fallback-arrow"><span>si cellule principale = vide, lire :</span></div>
+      <div class="field">
+        <label>Fichier Excel — repli</label>
+        <input id="f_fb_source" value="${escAttr(src)}" placeholder="ex: Budget_2024.xlsx">
+      </div>
+      <div class="field">
+        <label>Feuille — repli</label>
+        <input id="f_fb_sheet" value="${escAttr(sht)}" placeholder="ex: Résumé">
+      </div>
+      <div class="field">
+        <label>Cellule de repli</label>
+        <input id="f_fb_cell" value="" placeholder="ex: C14" style="font-family:var(--mono);font-size:14px;color:#f59e0b">
+      </div>
+    `;
+  } else {
+    fields.style.display = 'none';
+    fields.innerHTML = '';
+  }
+}
+
+function renderList() {
+  if (placeholders.length === 0) return `<div class="empty-state"><p>Aucun placeholder</p></div>`;
+  return `
+    <div class="ph-list">
+      ${placeholders.map(p => {
+        const m = mappings[p.name];
+        const isActive = p.name === activePh;
+        return `<div class="ph-list-item ${m?'mapped':''} ${isActive?'active':''}" onclick="selectPhFromList('${p.name}')">
+          <div class="ph-name ${m?'mapped-name':'unmapped-name'}">{{${p.name}}}</div>
+          <div class="ph-summary">${m
+            ? (m.type === 'cell'
+                ? `${m.source||'?'} → ${m.sheet||'?'}!${m.cell||'?'}${m.fallback ? ` <span style="color:#f59e0b;font-weight:700" title="Repli: ${m.fallback.cell}">⇣ ${m.fallback.cell}</span>` : ''}`
+                : `Formule : ${(m.formula||'').slice(0,40)}${(m.formula||'').length>40?'…':''}`)
+            : '<span style="color:#e6a817">⚠ Non mappé</span>'
+          }</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  renderPanel();
+}
+
+function selectPhFromList(name) {
+  activePh = name;
+  activeTab = 'form';
+  renderDocument();
+  renderPanel();
+  // scroll to first occurrence in doc
+  setTimeout(() => {
+    const chip = document.querySelector('.ph-chip.active');
+    if (chip) chip.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 50);
+}
+
+function setType(t) {
+  const current = mappings[activePh] || {};
+  current.type = t;
+  mappings[activePh] = current;
+  renderPanel();
+}
+
+function escAttr(s) {
+  return String(s).replace(/"/g, '&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Save / Clear ───────────────────────────────────────────────────────
+function saveMapping() {
+  if (!activePh) return;
+  const type = (mappings[activePh]?.type) || 'cell';
+  const m = {
+    type,
+    label: document.getElementById('f_label')?.value.trim() || '',
+    format: document.getElementById('f_format')?.value || 'number',
+    description: document.getElementById('f_description')?.value.trim() || '',
+  };
+
+  if (type === 'cell') {
+    m.source = document.getElementById('f_source')?.value.trim() || '';
+    m.sheet  = document.getElementById('f_sheet')?.value.trim() || '';
+    m.cell   = document.getElementById('f_cell')?.value.trim().toUpperCase() || '';
+    if (!m.source || !m.cell) { showToast("⚠ Fichier et cellule requis"); return; }
+
+    // Fallback
+    const fbEnabled = document.getElementById('f_fallback_enabled')?.checked;
+    if (fbEnabled) {
+      const fbSource = document.getElementById('f_fb_source')?.value.trim() || '';
+      const fbSheet  = document.getElementById('f_fb_sheet')?.value.trim() || '';
+      const fbCell   = document.getElementById('f_fb_cell')?.value.trim().toUpperCase() || '';
+      if (!fbCell) { showToast("⚠ Cellule de repli requise"); return; }
+      m.fallback = { source: fbSource || m.source, sheet: fbSheet || m.sheet, cell: fbCell };
+    } else {
+      delete m.fallback;
+    }
+  } else {
+    m.formula = document.getElementById('f_formula')?.value.trim() || '';
+    if (!m.formula) { showToast("⚠ Formule requise"); return; }
+  }
+
+  mappings[activePh] = m;
+
+  // auto-advance to next unmapped
+  const idx = placeholders.findIndex(p => p.name === activePh);
+  const next = placeholders.slice(idx + 1).find(p => !mappings[p.name]);
+  if (next) activePh = next.name;
+
+  renderDocument();
+  renderPanel();
+  showToast(`✓ Mapping enregistré${next ? ' — suivant : {{' + next.name + '}}' : ' — tout est mappé !'}`);
+}
+
+function clearMapping() {
+  if (!activePh) return;
+  delete mappings[activePh];
+  renderDocument();
+  renderPanel();
+  showToast(`Mapping effacé pour {{${activePh}}}`);
+}
+
+// ── Export JSON ────────────────────────────────────────────────────────
+function exportJSON() {
+  if (placeholders.length === 0) { showToast("⚠ Aucun texte chargé"); return; }
+
+  const unmapped = placeholders.filter(p => !mappings[p.name]);
+
+  const output = {
+    _meta: {
+      generated_at: new Date().toISOString(),
+      tool: "Annotateur de Rapport",
+      total_placeholders: placeholders.length,
+      mapped: placeholders.length - unmapped.length,
+      unmapped: unmapped.length,
+    },
+    report_text: reportText,
+    placeholders: {}
+  };
+
+  for (const ph of placeholders) {
+    const m = mappings[ph.name];
+    output.placeholders[`{{${ph.name}}}`] = m
+      ? { ...m, _mapped: true }
+      : { _mapped: false, _note: "Non mappé" };
+  }
+
+  const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mapping.json';
+  a.click();
+  showToast(`✓ mapping.json exporté (${placeholders.length - unmapped.length}/${placeholders.length} mappés)`);
+}
+
+// ── Import JSON ────────────────────────────────────────────────────────
+function importJSON() {
+  document.getElementById('importTextarea').value = '';
+  document.getElementById('importModal').classList.add('open');
+}
+function doImport() {
+  const txt = document.getElementById('importTextarea').value.trim();
+  let data;
+  try { data = JSON.parse(txt); } catch { showToast("⚠ JSON invalide"); return; }
+  document.getElementById('importModal').classList.remove('open');
+
+  if (data.report_text) {
+    reportText = data.report_text;
+    // re-extract placeholders
+    const found = new Map();
+    let m;
+    const re = /\{\{([A-Z0-9_]+)\}\}/g;
+    while ((m = re.exec(reportText)) !== null) {
+      const name = m[1];
+      if (!found.has(name)) found.set(name, []);
+      found.get(name).push({ start: m.index, end: m.index + m[0].length });
+    }
+    placeholders = Array.from(found.entries()).map(([name, occ]) => ({ name, occurrences: occ }));
+  }
+
+  // restore mappings
+  if (data.placeholders) {
+    mappings = {};
+    for (const [key, val] of Object.entries(data.placeholders)) {
+      const name = key.replace(/^\{\{|\}\}$/g, '');
+      if (val._mapped) mappings[name] = val;
+    }
+  }
+
+  activePh = null;
+  renderDocument();
+  renderPanel();
+  showToast(`✓ Mapping importé — ${Object.keys(mappings).length} entrées`);
+}
+
+// ── Modals ─────────────────────────────────────────────────────────────
+function openPasteModal() {
+  document.getElementById('modalTextarea').value = reportText;
+  document.getElementById('pasteModal').classList.add('open');
+}
+function closePasteModal() {
+  document.getElementById('pasteModal').classList.remove('open');
+}
+
+// ── Demo ───────────────────────────────────────────────────────────────
+function loadDemo() {
+  const demo = `Rapport Annuel 2024 — Synthèse Financière
+
+Le chiffre d'affaires total de l'exercice 2024 s'élève à {{CA_TOTAL}} €, en progression de {{VARIATION_CA}}% par rapport à l'exercice précédent ({{CA_N1}} € en 2023).
+
+La marge brute atteint {{MARGE_BRUTE}} €, représentant un taux de {{MARGE_BRUTE_PCT}}% du chiffre d'affaires. Les charges directes s'établissent à {{CHARGES_DIRECTES}} €.
+
+Ressources Humaines
+
+L'effectif global au 31 décembre 2024 est de {{EFFECTIF_TOTAL}} salariés, dont {{EFFECTIF_CDI}} CDI et {{EFFECTIF_CDD}} CDD. Au cours de l'exercice, {{NB_RECRUTEMENTS}} recrutements ont été réalisés.
+
+La masse salariale totale représente {{MASSE_SALARIALE}} €, soit {{MASSE_SALARIALE_PCT}}% du chiffre d'affaires.
+
+Budget et Réalisations
+
+Le budget initial alloué était de {{BUDGET_INITIAL}} €. Le réalisé à fin décembre 2024 s'établit à {{BUDGET_REALISE}} €, laissant un écart de {{ECART_BUDGET}} €.`;
+
+  reportText = '';
+  processText(demo);
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// Click outside modal to close
+document.getElementById('pasteModal').addEventListener('click', function(e) {
+  if (e.target === this) closePasteModal();
+});
+document.getElementById('importModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+</script>
+</body>
+</html>
