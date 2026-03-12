@@ -384,7 +384,7 @@ let mappings = {};       // { placeholderName: { type, source, sheet, cell, form
 let activePh = null;     // currently selected placeholder name
 let activeTab = "form";  // "form" | "list"
 
-const PLACEHOLDER_RE = /\{([A-Z0-9_]+)\}/g;
+const PLACEHOLDER_RE = /\{([A-Za-z0-9_]+)\}/g;
 
 // ── Load text ──────────────────────────────────────────────────────────
 function loadText() {
@@ -433,7 +433,7 @@ function renderDocument() {
   // Replace placeholders with chips — process from end to start to preserve indices
   // We work on the original text char positions but in the escaped string things shift,
   // so we replace using regex on the escaped string instead.
-  html = html.replace(/\{([A-Z0-9_]+)\}/g, (match, name) => {
+  html = html.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => {
     const isMapped = !!mappings[name];
     const isActive = name === activePh;
     const classes = ['ph-chip', isMapped ? 'mapped' : 'unmapped', isActive ? 'active' : ''].filter(Boolean).join(' ');
@@ -795,7 +795,7 @@ function doImport() {
     // re-extract placeholders
     const found = new Map();
     let m;
-    const re = /\{([A-Z0-9_]+)\}/g;
+    const re = /\{([A-Za-z0-9_]+)\}/g;
     while ((m = re.exec(reportText)) !== null) {
       const name = m[1];
       if (!found.has(name)) found.set(name, []);
